@@ -68,10 +68,7 @@ function App() {
         },
       };
 
-      const resp = (await fetch(endpoint, {
-        method: 'GET',
-        mode: 'no-cors',
-      })) as any;
+      const resp = (await fetch(endpoint)) as any;
 
       const reader = resp.body.getReader();
       let totalBytes = 0;
