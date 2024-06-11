@@ -72,9 +72,16 @@ function App() {
         method: 'GET',
         mode: 'no-cors',
       })) as any;
+
+      const reader = resp.body.getReader();
       let totalBytes = 0;
-      for await (const chunk of resp.body) {
-        totalBytes += chunk.length;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          break;
+        }
+        totalBytes += value.length;
       }
 
       const emissionsResult = defaultModel.perByteTrace(
