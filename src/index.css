@@ -58,6 +58,10 @@ input {
   margin-right: 20px;
 }
 
+hr {
+  margin-top: 80px;
+}
+
 @media (prefers-color-scheme: light) {
   :root {
     color: #213547;

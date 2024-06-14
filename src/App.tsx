@@ -3,11 +3,22 @@ import { co2, hosting } from '@tgwf/co2';
 import './App.css';
 import { IgreenHostOutput } from './types';
 
+const PER_BYTE_TRACE_DEFAULT_OPTIONS = {
+  gridIntensity: {
+    device: { country: 'BRA' },
+    dataCenter: { country: 'BRA' },
+    networks: 442,
+  },
+};
+
 function App() {
   const [hostIsGreenOutput, setHostIsGreenOutput] = useState<IgreenHostOutput>({
     isGreen: undefined,
   });
   const [dataTransferOutput, setDataTransferOutput] = useState<any>({});
+  const [fileUploadOutput, setFileUploadOutput] = useState<any>({
+    fileUploadCo2Emissions: 0,
+  });
 
   const handleGreenHostTest = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -47,7 +58,6 @@ function App() {
     event.preventDefault();
 
     const defaultModel = new co2({ model: 'swd' });
-    const oneByteModel = new co2({ model: '1byte' });
 
     const form = event.currentTarget;
     const { elements } = form;
@@ -68,38 +78,92 @@ function App() {
         },
       };
 
-      const resp = (await fetch(endpoint)) as any;
+      const response = await fetch(endpoint) as any;
 
-      const reader = resp.body.getReader();
-      let totalBytes = 0;
+      if (response.body) {
+        const reader = response.body.getReader();
+        let totalBytes = 0;
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
-          break;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            break;
+          }
+          totalBytes += value.length;
         }
-        totalBytes += value.length;
+
+        const { co2: co2Emissions, green, variables } = defaultModel.perByteTrace(
+          totalBytes,
+          true,
+          options
+        );
+
+        setDataTransferOutput({
+          co2Emissions,
+          isEmissionsGreen: String(green),
+          ...variables,
+        });
       }
 
-      const emissionsResult = defaultModel.perByteTrace(
-        totalBytes,
-        true,
-        options
-      );
-
-      setDataTransferOutput({
-        emissionsResult,
-      });
     } catch ({ message: error }: any) {
-      console.info('error', error);
+      const errorMessage = error === 'Failed to fetch' ? 'Failed to fetch normally caused by CORS' : error;
       setDataTransferOutput({
-        error,
+        error: errorMessage,
       });
     }
   };
 
+  const handleFileUploadTest = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    try {
+      const defaultModel = new co2({ model: 'swd' });
+
+      const form = event.currentTarget;
+      const { elements } = form;
+      const [input] = elements;
+
+      const inputHostElement = input as HTMLInputElement;
+      const inputFiles = inputHostElement.files;
+
+      const fileSizeBytes = inputFiles ? inputFiles[0].size : 0;
+
+      const { co2: co2Emissions } = defaultModel.perByteTrace(
+        fileSizeBytes,
+        true,
+        PER_BYTE_TRACE_DEFAULT_OPTIONS
+      );
+
+      setFileUploadOutput({
+        fileUploadCo2Emissions: co2Emissions,
+      });
+    } catch ({ message: error }: any) {
+      setFileUploadOutput({
+        error,
+      });
+    }
+  }
+
   const { isGreen, error: hostIsGreenError } = hostIsGreenOutput;
-  const { emissionsResult, error: dataTransferError } = dataTransferOutput;
+
+  const {
+    co2Emissions,
+    isEmissionsGreen,
+    bytes,
+    description,
+    gridIntensity = {},
+    error: dataTransferError
+  } = dataTransferOutput;
+
+  const {
+    dataCenter,
+    description: gridDescription,
+    device,
+    network,
+    production,
+  } = gridIntensity;
+
+  const { fileUploadCo2Emissions, error: fileUpadloadError } = fileUploadOutput;
 
   return (
     <main>
@@ -121,10 +185,9 @@ function App() {
       <hr />
 
       <section>
-        <h2>CO2 Emissions vs data transfer</h2>
-        <p></p>
+        <h2>CO2 Emissions vs data transfer (SWD model)</h2>
         <form onSubmit={handleDataTransferTest}>
-          <input type="text" placeholder="Endpoint URL" name="endpointUrl" />
+          <input type="text" placeholder="Website URL or endpoint" name="endpointUrl" />
           <input
             defaultValue="BRA"
             type="text"
@@ -135,9 +198,42 @@ function App() {
         </form>
 
         {!dataTransferError ? (
-          <p>Result: {emissionsResult && emissionsResult}</p>
+          <div>
+            <strong>Results</strong>
+            {co2Emissions && (
+              <>
+                <p><strong>Co2 emissions (in grammes):</strong> {co2Emissions}</p>
+                <p><strong>Is this from a green data center?</strong> {isEmissionsGreen}</p>
+                <p><strong>Bytes:</strong> {bytes}</p>
+                <div>
+                  <h4>{description}</h4>
+                  <p><strong>Data center:</strong> {dataCenter}</p>
+                  <p><strong>Description:</strong> {gridDescription}</p>
+                  <p><strong>Device:</strong> {device}</p>
+                  <p><strong>Network:</strong> {network}</p>
+                  <p><strong>Production:</strong> {production}</p>
+                </div>
+              </>
+            )}
+          </div>
         ) : (
           <p>Error: {dataTransferError}</p>
+        )}
+      </section>
+
+      <hr />
+
+      <section>
+        <h2>File upload transfer check (SWD model)</h2>
+        <form onSubmit={handleFileUploadTest}>
+          <input type="file" />
+          <button type="submit">Upload</button>
+        </form>
+
+        {!fileUpadloadError ? (
+          <p>Result: {!!fileUploadCo2Emissions && `${fileUploadCo2Emissions} (co2 in grammes)`}</p>
+        ) : (
+          <p>Error: {fileUpadloadError}</p>
         )}
       </section>
     </main>
